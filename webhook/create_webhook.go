@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/cli/go-gh"
 	"github.com/cli/go-gh/pkg/api"
@@ -33,18 +34,18 @@ type createHookResponse struct {
 }
 
 // createHook issues a request against the GitHub API to create a dev webhook
-func createHook(o *hookOptions) (string, error) {
+func createHook(o *hookOptions) (string, func() error, error) {
 	apiClient, err := gh.RESTClient(&api.ClientOptions{
 		Host: o.Host,
 	})
 	if err != nil {
-		return "", fmt.Errorf("error creating rest client: %w", err)
+		return "", nil, fmt.Errorf("error creating rest client: %w", err)
 	}
 	path := fmt.Sprintf("repos/%s/hooks", o.Repo)
 	req := createHookRequest{
 		Name:   "cli",
 		Events: o.EventTypes,
-		Active: true,
+		Active: false,
 		Config: hookConfig{
 			ContentType: "json",
 			InsecureSSL: "0",
@@ -53,12 +54,20 @@ func createHook(o *hookOptions) (string, error) {
 
 	reqBytes, err := json.Marshal(req)
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 	var res createHookResponse
 	err = apiClient.Post(path, bytes.NewReader(reqBytes), &res)
 	if err != nil {
-		return "", fmt.Errorf("error creating webhook: %w", err)
+		return "", nil, fmt.Errorf("error creating webhook: %w", err)
 	}
-	return res.WsURL, nil
+
+	return res.WsURL, func() error {
+		path := fmt.Sprintf("repos/%s/hooks/%d", o.Repo, res.ID)
+		err = apiClient.Patch(path, strings.NewReader(`{"active": true}`), nil)
+		if err != nil {
+			return fmt.Errorf("error creating webhook: %w", err)
+		}
+		return nil
+	}, nil
 }

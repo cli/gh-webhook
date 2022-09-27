@@ -67,13 +67,13 @@ func NewCmdForward(runF func(*hookOptions) error) *cobra.Command {
 				return fmt.Errorf("you must be authenticated to run this command")
 			}
 
-			wsURL, err := createHook(opts)
+			wsURL, activate, err := createHook(opts)
 			if err != nil {
 				return err
 			}
 
 			for {
-				if err := runFwd(opts.Out, opts.Port, token, wsURL); err != nil {
+				if err := runFwd(opts.Out, opts.Port, token, wsURL, activate); err != nil {
 					if websocket.IsCloseError(err, websocket.CloseNormalClosure) {
 						return nil
 					}
@@ -93,9 +93,9 @@ type wsEventReceived struct {
 	Body   []byte
 }
 
-func runFwd(out io.Writer, port int, token, wsURL string) error {
+func runFwd(out io.Writer, port int, token, wsURL string, activateHook func() error) error {
 	for i := 0; i < 3; i++ {
-		err := handleWebsocket(out, port, token, wsURL)
+		err := handleWebsocket(out, port, token, wsURL, activateHook)
 		if err != nil {
 			// If the error is a server disconnect (1006), retry connecting
 			if websocket.IsCloseError(err, websocket.CloseAbnormalClosure) {
@@ -112,7 +112,7 @@ func runFwd(out io.Writer, port int, token, wsURL string) error {
 var retries = 0
 
 // handleWebsocket mediates between websocket server and local web server
-func handleWebsocket(out io.Writer, port int, token, url string) error {
+func handleWebsocket(out io.Writer, port int, token, url string, activateHook func() error) error {
 	c, err := dial(token, url)
 	if err != nil {
 		return fmt.Errorf("error dialing to ws server: %w", err)
@@ -121,6 +121,11 @@ func handleWebsocket(out io.Writer, port int, token, url string) error {
 	retries = 0
 
 	fmt.Fprintf(out, "Forwarding Webhook events from GitHub...\n")
+	err = activateHook()
+	if err != nil {
+		return fmt.Errorf("error activating hook: %w", err)
+	}
+
 	for {
 		var ev wsEventReceived
 		err := c.ReadJSON(&ev)
