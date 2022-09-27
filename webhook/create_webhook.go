@@ -58,7 +58,7 @@ func createHook(o *hookOptions) (string, error) {
 	var res createHookResponse
 	err = apiClient.Post(path, bytes.NewReader(reqBytes), &res)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("error creating webhook: %w", err)
 	}
 	return res.WsURL, nil
 }

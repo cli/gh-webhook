@@ -62,14 +62,14 @@ func NewCmdForward(runF func(*hookOptions) error) *cobra.Command {
 				return runF(opts)
 			}
 
-			wsURL, err := createHook(opts)
-			if err != nil {
-				return err
-			}
-
 			token, _ := auth.TokenForHost(opts.Host)
 			if token == "" {
 				return fmt.Errorf("you must be authenticated to run this command")
+			}
+
+			wsURL, err := createHook(opts)
+			if err != nil {
+				return err
 			}
 
 			for {
