@@ -169,6 +169,10 @@ func forwardEvent(port int, ev wsEventReceived) (*httpEventForward, error) {
 	event = strings.ReplaceAll(event, "\n", "")
 	event = strings.ReplaceAll(event, "\r", "")
 	log.Printf("[LOG] received the following event: %v \n", event)
+	if port == 0 {
+		fmt.Printf("%s\n", ev.Body)
+		return &httpEventForward{Status: 200, Header: make(http.Header), Body: []byte("OK")}, nil
+	}
 	webhookRcvServerURL := fmt.Sprintf("http://localhost:%d", port)
 
 	req, err := http.NewRequest(http.MethodPost, webhookRcvServerURL, bytes.NewReader(ev.Body))
