@@ -17,7 +17,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-const gitHubAPIProdURL = "http://api.github.com"
+const gitHubAPIProdURL = "api.github.com"
 
 type hookOptions struct {
 	Out        io.Writer
