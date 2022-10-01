@@ -72,13 +72,14 @@ func NewCmdForward(runF func(*hookOptions) error) *cobra.Command {
 				return err
 			}
 
-			for {
-				if err := runFwd(opts.Out, opts.Port, token, wsURL, activate); err != nil {
+			for i := 0; i < 3; i++ {
+				if err = runFwd(opts.Out, opts.Port, token, wsURL, activate); err != nil {
 					if websocket.IsCloseError(err, websocket.CloseNormalClosure) {
 						return nil
 					}
 				}
 			}
+			return err
 		},
 	}
 	cmd.Flags().StringSliceVarP(&opts.EventTypes, "events", "E", []string{}, "(required) Names of the event types to forward")
@@ -99,7 +100,6 @@ func runFwd(out io.Writer, port int, token, wsURL string, activateHook func() er
 		if err != nil {
 			// If the error is a server disconnect (1006), retry connecting
 			if websocket.IsCloseError(err, websocket.CloseAbnormalClosure) {
-				retries++
 				time.Sleep(5 * time.Second)
 				continue
 			}
@@ -109,8 +109,6 @@ func runFwd(out io.Writer, port int, token, wsURL string, activateHook func() er
 	return fmt.Errorf("unable to connect to webhooks server, forwarding stopped")
 }
 
-var retries = 0
-
 // handleWebsocket mediates between websocket server and local web server
 func handleWebsocket(out io.Writer, port int, token, url string, activateHook func() error) error {
 	c, err := dial(token, url)
@@ -118,7 +116,6 @@ func handleWebsocket(out io.Writer, port int, token, url string, activateHook fu
 		return fmt.Errorf("error dialing to ws server: %w", err)
 	}
 	defer c.Close()
-	retries = 0
 
 	fmt.Fprintf(out, "Forwarding Webhook events from GitHub...\n")
 	err = activateHook()
@@ -150,8 +147,12 @@ func handleWebsocket(out io.Writer, port int, token, url string, activateHook fu
 func dial(token, url string) (*websocket.Conn, error) {
 	h := make(http.Header)
 	h.Set("Authorization", token)
-	c, _, err := websocket.DefaultDialer.Dial(url, h)
+	c, resp, err := websocket.DefaultDialer.Dial(url, h)
 	if err != nil {
+		if resp != nil {
+			body, _ := io.ReadAll(resp.Body)
+			err = fmt.Errorf("code: %v - body: %s - err: %w", resp.StatusCode, body, err)
+		}
 		return nil, err
 	}
 	return c, nil
