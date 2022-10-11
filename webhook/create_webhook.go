@@ -66,7 +66,7 @@ func createHook(o *hookOptions) (string, func() error, error) {
 		path := fmt.Sprintf("repos/%s/hooks/%d", o.Repo, res.ID)
 		err = apiClient.Patch(path, strings.NewReader(`{"active": true}`), nil)
 		if err != nil {
-			return fmt.Errorf("error creating webhook: %w", err)
+			return fmt.Errorf("error activating webhook: %w", err)
 		}
 		return nil
 	}, nil
