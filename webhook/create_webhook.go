@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/cli/go-gh"
@@ -42,6 +43,10 @@ func createHook(o *hookOptions) (string, func() error, error) {
 		return "", nil, fmt.Errorf("error creating rest client: %w", err)
 	}
 	path := fmt.Sprintf("repos/%s/hooks", o.Repo)
+	if o.Org != "" {
+		path = fmt.Sprintf("orgs/%s/hooks", o.Org)
+	}
+
 	req := createHookRequest{
 		Name:   "cli",
 		Events: o.EventTypes,
@@ -62,8 +67,10 @@ func createHook(o *hookOptions) (string, func() error, error) {
 		return "", nil, fmt.Errorf("error creating webhook: %w", err)
 	}
 
+	// reset path for activation.
+	path += "/" + strconv.Itoa(res.ID)
+
 	return res.WsURL, func() error {
-		path := fmt.Sprintf("repos/%s/hooks/%d", o.Repo, res.ID)
 		err = apiClient.Patch(path, strings.NewReader(`{"active": true}`), nil)
 		if err != nil {
 			return fmt.Errorf("error activating webhook: %w", err)

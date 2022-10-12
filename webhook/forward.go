@@ -24,6 +24,7 @@ type hookOptions struct {
 	Host       string
 	EventTypes []string
 	Repo       string
+	Org        string
 	Port       int
 }
 
@@ -33,7 +34,7 @@ func NewCmdForward(runF func(*hookOptions) error) *cobra.Command {
 		Out: os.Stdout,
 	}
 	cmd := &cobra.Command{
-		Use:   "forward --events=<event_types> --repo=<repo> [--port=<port>] [--host=<host>]",
+		Use:   "forward --events=<event_types> --repo|org=<repo|org> [--port=<port>] [--host=<host>]",
 		Short: "Receive test events on a server running locally",
 		Long: heredoc.Doc(`To output event payloads to stdout instead of sending to a server,
 			omit the --port flag. If the --host flag is not specified, webhooks will be created against github.com`),
@@ -41,14 +42,15 @@ func NewCmdForward(runF func(*hookOptions) error) *cobra.Command {
 			# create a dev webhook for the 'issue_open' event in the monalisa/smile repo in GitHub running locally, and
 			# forward payloads for the triggered event to localhost:9999
 
-			$ gh webhooks forward --events=issue_open --repo=monalisa/smile --port=9999 --host=api.github.localhost
+			$ gh webhooks forward --events=issues --repo=monalisa/smile --port=9999
+			$ gh webhooks forward --events=issues --org=github --port=9999
 		`),
 		RunE: func(*cobra.Command, []string) error {
 			if opts.EventTypes == nil {
 				return cmdutil.FlagErrorf("`--events` flag required")
 			}
-			if opts.Repo == "" {
-				return cmdutil.FlagErrorf("`--repo` flag required")
+			if opts.Repo == "" && opts.Org == "" {
+				return cmdutil.FlagErrorf("`--repo` or `--org` flag required")
 			}
 			if opts.Host == "" {
 				opts.Host = gitHubAPIProdURL
@@ -83,9 +85,10 @@ func NewCmdForward(runF func(*hookOptions) error) *cobra.Command {
 		},
 	}
 	cmd.Flags().StringSliceVarP(&opts.EventTypes, "events", "E", []string{}, "(required) Names of the event types to forward")
-	cmd.Flags().StringVarP(&opts.Repo, "repo", "R", "", "(required) Name of the repo where the webhook is installed")
+	cmd.Flags().StringVarP(&opts.Repo, "repo", "R", "", "Name of the repo where the webhook is installed")
 	cmd.Flags().IntVarP(&opts.Port, "port", "P", 0, "(optional) Local port where the server which will receive webhooks is running")
 	cmd.Flags().StringVarP(&opts.Host, "host", "H", "", "(optional) Host address of GitHub API, default: api.github.com")
+	cmd.Flags().StringVarP(&opts.Org, "org", "O", "", "Name of the org where the webhook is installed")
 	return cmd
 }
 
@@ -100,9 +103,11 @@ func runFwd(out io.Writer, port int, token, wsURL string, activateHook func() er
 		if err != nil {
 			// If the error is a server disconnect (1006), retry connecting
 			if websocket.IsCloseError(err, websocket.CloseAbnormalClosure) {
+				fmt.Println("ABNORMAL CLOSURE")
 				time.Sleep(5 * time.Second)
 				continue
 			}
+			fmt.Println("BRUH", err)
 			return err
 		}
 	}
