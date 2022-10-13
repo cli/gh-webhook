@@ -103,11 +103,9 @@ func runFwd(out io.Writer, port int, token, wsURL string, activateHook func() er
 		if err != nil {
 			// If the error is a server disconnect (1006), retry connecting
 			if websocket.IsCloseError(err, websocket.CloseAbnormalClosure) {
-				fmt.Println("ABNORMAL CLOSURE")
 				time.Sleep(5 * time.Second)
 				continue
 			}
-			fmt.Println("BRUH", err)
 			return err
 		}
 	}
