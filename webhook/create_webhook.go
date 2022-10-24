@@ -22,6 +22,7 @@ type hookConfig struct {
 	ContentType string `json:"content_type"`
 	InsecureSSL string `json:"insecure_ssl"`
 	URL         string `json:"url"`
+	Secret      string `json:"secret,omitempty"`
 }
 
 type createHookResponse struct {
@@ -54,6 +55,7 @@ func createHook(o *hookOptions) (string, func() error, error) {
 		Config: hookConfig{
 			ContentType: "json",
 			InsecureSSL: "0",
+			Secret:      o.Secret,
 		},
 	}
 

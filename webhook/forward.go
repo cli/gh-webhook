@@ -26,6 +26,7 @@ type hookOptions struct {
 	Repo       string
 	Org        string
 	Port       int
+	Secret     string
 }
 
 // NewCmdForward returns a forward command.
@@ -89,6 +90,7 @@ func NewCmdForward(runF func(*hookOptions) error) *cobra.Command {
 	cmd.Flags().IntVarP(&opts.Port, "port", "P", 0, "(optional) Local port where the server which will receive webhooks is running")
 	cmd.Flags().StringVarP(&opts.Host, "host", "H", "", "(optional) Host address of GitHub API, default: api.github.com")
 	cmd.Flags().StringVarP(&opts.Org, "org", "O", "", "Name of the org where the webhook is installed")
+	cmd.Flags().StringVarP(&opts.Secret, "secret", "S", "", "(optional) webhook secret for incoing events")
 	return cmd
 }
 
