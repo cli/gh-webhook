@@ -101,7 +101,7 @@ type wsEventReceived struct {
 	Body   []byte
 }
 
-func runFwd(out io.Writer, port int, path string, token, wsURL string, activateHook func() error) error {
+func runFwd(out io.Writer, port int, path, token, wsURL string, activateHook func() error) error {
 	for i := 0; i < 3; i++ {
 		err := handleWebsocket(out, port, path, token, wsURL, activateHook)
 		if err != nil {
@@ -117,7 +117,7 @@ func runFwd(out io.Writer, port int, path string, token, wsURL string, activateH
 }
 
 // handleWebsocket mediates between websocket server and local web server
-func handleWebsocket(out io.Writer, port int, path string, token, url string, activateHook func() error) error {
+func handleWebsocket(out io.Writer, port int, path, token, url string, activateHook func() error) error {
 	c, err := dial(token, url)
 	if err != nil {
 		return fmt.Errorf("error dialing to ws server: %w", err)
