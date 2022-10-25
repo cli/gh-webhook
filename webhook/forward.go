@@ -85,7 +85,7 @@ func NewCmdForward(runF func(*hookOptions) error) *cobra.Command {
 			return err
 		},
 	}
-	cmd.Flags().StringSliceVarP(&opts.EventTypes, "events", "E", []string{}, "(required) Names of the event types to forward")
+	cmd.Flags().StringSliceVarP(&opts.EventTypes, "events", "E", []string{}, "(required) Names of the event types to forward. Event types can be separated by commas (e.g. `issues,pull_request`) or passed as multiple arguments (e.g. `--events issues --events pull_request`.")
 	cmd.Flags().StringVarP(&opts.Repo, "repo", "R", "", "Name of the repo where the webhook is installed")
 	cmd.Flags().IntVarP(&opts.Port, "port", "P", 0, "(optional) Local port where the server which will receive webhooks is running")
 	cmd.Flags().StringVarP(&opts.Host, "host", "H", "", "(optional) Host address of GitHub API, default: api.github.com")
