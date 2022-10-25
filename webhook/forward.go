@@ -25,7 +25,7 @@ type hookOptions struct {
 	EventTypes []string
 	Repo       string
 	Org        string
-	Url        string
+	URL        string
 	Secret     string
 }
 
@@ -57,7 +57,7 @@ func NewCmdForward(runF func(*hookOptions) error) *cobra.Command {
 				opts.GitHubHost = gitHubAPIProdURL
 			}
 
-			if opts.Url == "" {
+			if opts.URL == "" {
 				fmt.Fprintf(opts.Out, "No --url specified, printing webhook payloads to stdout.\n")
 			}
 
@@ -76,7 +76,7 @@ func NewCmdForward(runF func(*hookOptions) error) *cobra.Command {
 			}
 
 			for i := 0; i < 3; i++ {
-				if err = runFwd(opts.Out, opts.Url, token, wsURL, activate); err != nil {
+				if err = runFwd(opts.Out, opts.URL, token, wsURL, activate); err != nil {
 					if websocket.IsCloseError(err, websocket.CloseNormalClosure) {
 						return nil
 					}
@@ -88,7 +88,7 @@ func NewCmdForward(runF func(*hookOptions) error) *cobra.Command {
 	cmd.Flags().StringSliceVarP(&opts.EventTypes, "events", "E", []string{}, "(required) Names of the event types to forward. Event types can be separated by commas (e.g. `issues,pull_request`) or passed as multiple arguments (e.g. `--events issues --events pull_request`.")
 	cmd.Flags().StringVarP(&opts.Repo, "repo", "R", "", "Name of the repo where the webhook is installed")
 	cmd.Flags().StringVarP(&opts.GitHubHost, "github-host", "H", "", "(optional) Host for the GitHub API, default: api.github.com")
-	cmd.Flags().StringVarP(&opts.Url, "url", "U", "", "(optional) Local address where the server which will receive webhooks is running")
+	cmd.Flags().StringVarP(&opts.URL, "url", "U", "", "(optional) Local address where the server which will receive webhooks is running")
 	cmd.Flags().StringVarP(&opts.Org, "org", "O", "", "Name of the org where the webhook is installed")
 	cmd.Flags().StringVarP(&opts.Secret, "secret", "S", "", "(optional) webhook secret for incoming events")
 	return cmd
