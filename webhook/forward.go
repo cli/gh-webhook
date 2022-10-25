@@ -35,7 +35,7 @@ func NewCmdForward(runF func(*hookOptions) error) *cobra.Command {
 		Out: os.Stdout,
 	}
 	cmd := &cobra.Command{
-		Use:   "forward --events=<event_types> --repo|org=<repo|org> [--port=<port>] [--github-host=<github-host>] [--url=\"<url>\"]",
+		Use:   "forward --events=<event_types> --repo|org=<repo|org> [--url=\"<url>\"] [--github-host=<github-host>]",
 		Short: "Receive test events on a server running locally",
 		Long: heredoc.Doc(`To output event payloads to stdout instead of sending to a server,
 			omit the --url flag. If the --github-host flag is not specified, webhooks will be created against github.com`),
@@ -44,7 +44,7 @@ func NewCmdForward(runF func(*hookOptions) error) *cobra.Command {
 			# forward payloads for the triggered event to http://localhost:9999/webhooks
 
 			$ gh webhooks forward --events=issues --repo=monalisa/smile --url="http://localhost:9999/webhooks"
-			$ gh webhooks forward --events=issues --org=github --port=9999 --url="http://localhost:9999/webhooks"
+			$ gh webhooks forward --events=issues --org=github --url="http://localhost:9999/webhooks"
 		`),
 		RunE: func(*cobra.Command, []string) error {
 			if opts.EventTypes == nil {
