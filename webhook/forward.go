@@ -21,7 +21,7 @@ const gitHubAPIProdURL = "api.github.com"
 
 type hookOptions struct {
 	Out        io.Writer
-	Host       string
+	GitHubHost string
 	EventTypes []string
 	Repo       string
 	Org        string
@@ -35,10 +35,10 @@ func NewCmdForward(runF func(*hookOptions) error) *cobra.Command {
 		Out: os.Stdout,
 	}
 	cmd := &cobra.Command{
-		Use:   "forward --events=<event_types> --repo|org=<repo|org> [--port=<port>] [--host=<host>]",
+		Use:   "forward --events=<event_types> --repo|org=<repo|org> [--port=<port>] [--github-host=<github-host>]",
 		Short: "Receive test events on a server running locally",
 		Long: heredoc.Doc(`To output event payloads to stdout instead of sending to a server,
-			omit the --port flag. If the --host flag is not specified, webhooks will be created against github.com`),
+			omit the --port flag. If the --github-host flag is not specified, webhooks will be created against github.com`),
 		Example: heredoc.Doc(`
 			# create a dev webhook for the 'issue_open' event in the monalisa/smile repo in GitHub running locally, and
 			# forward payloads for the triggered event to localhost:9999
@@ -53,8 +53,8 @@ func NewCmdForward(runF func(*hookOptions) error) *cobra.Command {
 			if opts.Repo == "" && opts.Org == "" {
 				return cmdutil.FlagErrorf("`--repo` or `--org` flag required")
 			}
-			if opts.Host == "" {
-				opts.Host = gitHubAPIProdURL
+			if opts.GitHubHost == "" {
+				opts.GitHubHost = gitHubAPIProdURL
 			}
 
 			if opts.Port == 0 {
@@ -65,7 +65,7 @@ func NewCmdForward(runF func(*hookOptions) error) *cobra.Command {
 				return runF(opts)
 			}
 
-			token, _ := auth.TokenForHost(opts.Host)
+			token, _ := auth.TokenForHost(opts.GitHubHost)
 			if token == "" {
 				return fmt.Errorf("you must be authenticated to run this command")
 			}
@@ -88,7 +88,7 @@ func NewCmdForward(runF func(*hookOptions) error) *cobra.Command {
 	cmd.Flags().StringSliceVarP(&opts.EventTypes, "events", "E", []string{}, "(required) Names of the event types to forward. Event types can be separated by commas (e.g. `issues,pull_request`) or passed as multiple arguments (e.g. `--events issues --events pull_request`.")
 	cmd.Flags().StringVarP(&opts.Repo, "repo", "R", "", "Name of the repo where the webhook is installed")
 	cmd.Flags().IntVarP(&opts.Port, "port", "P", 0, "(optional) Local port where the server which will receive webhooks is running")
-	cmd.Flags().StringVarP(&opts.Host, "host", "H", "", "(optional) Host address of GitHub API, default: api.github.com")
+	cmd.Flags().StringVarP(&opts.GitHubHost, "github-host", "H", "", "(optional) Host for the GitHub API, default: api.github.com")
 	cmd.Flags().StringVarP(&opts.Org, "org", "O", "", "Name of the org where the webhook is installed")
 	cmd.Flags().StringVarP(&opts.Secret, "secret", "S", "", "(optional) webhook secret for incoming events")
 	return cmd
