@@ -38,7 +38,7 @@ func NewCmdForward(runF func(*hookOptions) error) *cobra.Command {
 		Use:   "forward --events=<event_types> --repo|org=<repo|org> [--url=\"<url>\"] [--github-host=<github-host>]",
 		Short: "Receive test events on a server running locally",
 		Long: heredoc.Doc(`To output event payloads to stdout instead of sending to a server,
-			omit the --url flag. If the --github-host flag is not specified, webhooks will be created against github.com`),
+			omit the --url flag.`),
 		Example: heredoc.Doc(`
 			# create a dev webhook for the 'issue_open' event in the monalisa/smile repo in GitHub running locally, and
 			# forward payloads for the triggered event to http://localhost:9999/webhooks
