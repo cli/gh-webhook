@@ -38,7 +38,7 @@ type createHookResponse struct {
 // createHook issues a request against the GitHub API to create a dev webhook
 func createHook(o *hookOptions) (string, func() error, error) {
 	apiClient, err := gh.RESTClient(&api.ClientOptions{
-		Host: o.Host,
+		Host: o.GitHubHost,
 	})
 	if err != nil {
 		return "", nil, fmt.Errorf("error creating rest client: %w", err)
