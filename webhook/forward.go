@@ -27,6 +27,7 @@ type hookOptions struct {
 	Org        string
 	Port       int
 	Secret     string
+	Path       string
 }
 
 // NewCmdForward returns a forward command.
@@ -35,10 +36,10 @@ func NewCmdForward(runF func(*hookOptions) error) *cobra.Command {
 		Out: os.Stdout,
 	}
 	cmd := &cobra.Command{
-		Use:   "forward --events=<event_types> --repo|org=<repo|org> [--port=<port>] [--host=<host>]",
+		Use:   "forward --events=<event_types> --repo|org=<repo|org> [--port=<port>] [--host=<host>] [--delivery-path=<path>]",
 		Short: "Receive test events on a server running locally",
 		Long: heredoc.Doc(`To output event payloads to stdout instead of sending to a server,
-			omit the --port flag. If the --host flag is not specified, webhooks will be created against github.com`),
+			omit the --port flag. If the --host flag is not specified, webhooks will be created against github.com. If the --delivery-path flag is not specified, webhooks will be sent to the root.`),
 		Example: heredoc.Doc(`
 			# create a dev webhook for the 'issue_open' event in the monalisa/smile repo in GitHub running locally, and
 			# forward payloads for the triggered event to localhost:9999
@@ -76,7 +77,7 @@ func NewCmdForward(runF func(*hookOptions) error) *cobra.Command {
 			}
 
 			for i := 0; i < 3; i++ {
-				if err = runFwd(opts.Out, opts.Port, token, wsURL, activate); err != nil {
+				if err = runFwd(opts.Out, opts.Port, opts.Path, token, wsURL, activate); err != nil {
 					if websocket.IsCloseError(err, websocket.CloseNormalClosure) {
 						return nil
 					}
@@ -91,6 +92,7 @@ func NewCmdForward(runF func(*hookOptions) error) *cobra.Command {
 	cmd.Flags().StringVarP(&opts.Host, "host", "H", "", "(optional) Host address of GitHub API, default: api.github.com")
 	cmd.Flags().StringVarP(&opts.Org, "org", "O", "", "Name of the org where the webhook is installed")
 	cmd.Flags().StringVarP(&opts.Secret, "secret", "S", "", "(optional) webhook secret for incoming events")
+	cmd.Flags().StringVarP(&opts.Path, "delivery-path", "D", "/", "(optional) Path which webhooks should be delivered to, default: `/`")
 	return cmd
 }
 
@@ -99,9 +101,9 @@ type wsEventReceived struct {
 	Body   []byte
 }
 
-func runFwd(out io.Writer, port int, token, wsURL string, activateHook func() error) error {
+func runFwd(out io.Writer, port int, path string, token, wsURL string, activateHook func() error) error {
 	for i := 0; i < 3; i++ {
-		err := handleWebsocket(out, port, token, wsURL, activateHook)
+		err := handleWebsocket(out, port, path, token, wsURL, activateHook)
 		if err != nil {
 			// If the error is a server disconnect (1006), retry connecting
 			if websocket.IsCloseError(err, websocket.CloseAbnormalClosure) {
@@ -115,7 +117,7 @@ func runFwd(out io.Writer, port int, token, wsURL string, activateHook func() er
 }
 
 // handleWebsocket mediates between websocket server and local web server
-func handleWebsocket(out io.Writer, port int, token, url string, activateHook func() error) error {
+func handleWebsocket(out io.Writer, port int, path string, token, url string, activateHook func() error) error {
 	c, err := dial(token, url)
 	if err != nil {
 		return fmt.Errorf("error dialing to ws server: %w", err)
@@ -135,7 +137,7 @@ func handleWebsocket(out io.Writer, port int, token, url string, activateHook fu
 			return fmt.Errorf("error receiving json event: %w", err)
 		}
 
-		resp, err := forwardEvent(port, ev)
+		resp, err := forwardEvent(port, path, ev)
 		if err != nil {
 			fmt.Fprintf(out, "Error forwarding event: %v\n", err)
 			continue
@@ -170,7 +172,7 @@ type httpEventForward struct {
 }
 
 // forwardEvent forwards events to the server running on the local port specified by the user
-func forwardEvent(port int, ev wsEventReceived) (*httpEventForward, error) {
+func forwardEvent(port int, path string, ev wsEventReceived) (*httpEventForward, error) {
 	event := ev.Header.Get("X-GitHub-Event")
 	event = strings.ReplaceAll(event, "\n", "")
 	event = strings.ReplaceAll(event, "\r", "")
@@ -179,7 +181,7 @@ func forwardEvent(port int, ev wsEventReceived) (*httpEventForward, error) {
 		fmt.Printf("%s\n", ev.Body)
 		return &httpEventForward{Status: 200, Header: make(http.Header), Body: []byte("OK")}, nil
 	}
-	webhookRcvServerURL := fmt.Sprintf("http://localhost:%d", port)
+	webhookRcvServerURL := fmt.Sprintf("http://localhost:%d%s", port, path)
 
 	req, err := http.NewRequest(http.MethodPost, webhookRcvServerURL, bytes.NewReader(ev.Body))
 	if err != nil {
