@@ -3,7 +3,9 @@ package webhook
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"net/http"
 	"strconv"
 	"strings"
 
@@ -66,6 +68,10 @@ func createHook(o *hookOptions) (string, func() error, error) {
 	var res createHookResponse
 	err = apiClient.Post(path, bytes.NewReader(reqBytes), &res)
 	if err != nil {
+		var apierr api.HTTPError
+		if errors.As(err, &apierr) && apierr.StatusCode == http.StatusUnprocessableEntity {
+			return "", nil, fmt.Errorf("you do not have access to this feature")
+		}
 		return "", nil, fmt.Errorf("error creating webhook: %w", err)
 	}
 
