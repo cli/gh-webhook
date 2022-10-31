@@ -43,8 +43,8 @@ func NewCmdForward(runF func(*hookOptions) error) *cobra.Command {
 			# create a dev webhook for the 'issue_open' event in the monalisa/smile repo in GitHub running locally, and
 			# forward payloads for the triggered event to http://localhost:9999/webhooks
 
-			$ gh webhooks forward --events=issues --repo=monalisa/smile --url="http://localhost:9999/webhooks"
-			$ gh webhooks forward --events=issues --org=github --url="http://localhost:9999/webhooks"
+			$ gh webhook forward --events=issues --repo=monalisa/smile --url="http://localhost:9999/webhooks"
+			$ gh webhook forward --events=issues --org=github --url="http://localhost:9999/webhooks"
 		`),
 		RunE: func(*cobra.Command, []string) error {
 			if opts.EventTypes == nil {
