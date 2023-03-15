@@ -17,16 +17,20 @@ import (
 	"github.com/spf13/cobra"
 )
 
-const gitHubAPIProdURL = "api.github.com"
+const (
+	gitHubAPIProdURL        = "api.github.com"
+	webhookForwarderProdURL = "wss://webhook-forwarder.github.com"
+)
 
 type hookOptions struct {
-	Out        io.Writer
-	GitHubHost string
-	EventTypes []string
-	Repo       string
-	Org        string
-	URL        string
-	Secret     string
+	Out              io.Writer
+	GitHubHost       string
+	WebhookForwarder string
+	EventTypes       []string
+	Repo             string
+	Org              string
+	URL              string
+	Secret           string
 }
 
 // NewCmdForward returns a forward command.
@@ -70,13 +74,19 @@ func NewCmdForward(runF func(*hookOptions) error) *cobra.Command {
 				return fmt.Errorf("you must be authenticated to run this command")
 			}
 
-			wsURL, activate, err := createHook(opts)
-			if err != nil {
-				return err
+			var err error
+			if opts.WebhookForwarder == "" {
+				opts.WebhookForwarder = webhookForwarderProdURL
 			}
-
+			wsURL := strings.TrimSuffix(opts.WebhookForwarder, "/") + "/forward"
+			chp := createHookParams{
+				Events: opts.EventTypes,
+				Repo:   opts.Repo,
+				Org:    opts.Org,
+				Secret: opts.Secret,
+			}
 			for i := 0; i < 3; i++ {
-				if err = runFwd(opts.Out, opts.URL, token, wsURL, activate); err != nil {
+				if err = runFwd(opts.Out, opts.URL, token, wsURL, chp); err != nil {
 					if websocket.IsCloseError(err, websocket.CloseNormalClosure) {
 						return nil
 					}
@@ -99,9 +109,9 @@ type wsEventReceived struct {
 	Body   []byte
 }
 
-func runFwd(out io.Writer, url, token, wsURL string, activateHook func() error) error {
+func runFwd(out io.Writer, url, token, wsURL string, chp createHookParams) error {
 	for i := 0; i < 3; i++ {
-		err := handleWebsocket(out, url, token, wsURL, activateHook)
+		err := handleWebsocket(out, url, token, wsURL, chp)
 		if err != nil {
 			// If the error is a server disconnect (1006), retry connecting
 			if websocket.IsCloseError(err, websocket.CloseAbnormalClosure) {
@@ -114,19 +124,40 @@ func runFwd(out io.Writer, url, token, wsURL string, activateHook func() error) 
 	return fmt.Errorf("unable to connect to webhooks server, forwarding stopped")
 }
 
+type createHookParams struct {
+	Events []string
+	Repo   string
+	Org    string
+	Secret string
+}
+
+type eventBody struct{ Type, Message string }
+
 // handleWebsocket mediates between websocket server and local web server
-func handleWebsocket(out io.Writer, url, token, wsURL string, activateHook func() error) error {
+func handleWebsocket(out io.Writer, url, token, wsURL string, chp createHookParams) error {
 	c, err := dial(token, wsURL)
 	if err != nil {
 		return fmt.Errorf("error dialing to ws server: %w", err)
 	}
 	defer c.Close()
 
-	fmt.Fprintf(out, "Forwarding Webhook events from GitHub...\n")
-	err = activateHook()
+	err = c.WriteJSON(chp)
 	if err != nil {
-		return fmt.Errorf("error activating hook: %w", err)
+		return fmt.Errorf("error sending create hook params: %w", err)
 	}
+
+	c.SetReadDeadline(time.Now().Add(5 * time.Second))
+	var eb eventBody
+	err = c.ReadJSON(&eb)
+	if err != nil {
+		return fmt.Errorf("error reading create hook response: %w", err)
+	}
+	if eb.Type == "error" {
+		return fmt.Errorf("error creating hook: %s", eb.Message)
+	}
+	c.SetReadDeadline(time.Time{})
+
+	fmt.Fprintf(out, "Forwarding Webhook events from GitHub...\n")
 
 	for {
 		var ev wsEventReceived
