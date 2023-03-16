@@ -1,4 +1,4 @@
-module github.com/github/gh-webhook
+module github.com/cli/gh-webhook
 
 go 1.19
 
