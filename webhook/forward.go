@@ -2,6 +2,7 @@ package webhook
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -11,7 +12,6 @@ import (
 	"time"
 
 	"github.com/MakeNowJust/heredoc"
-	"github.com/cli/cli/v2/pkg/cmdutil"
 	"github.com/cli/go-gh/pkg/auth"
 	"github.com/gorilla/websocket"
 	"github.com/spf13/cobra"
@@ -52,10 +52,10 @@ func NewCmdForward(runF func(*hookOptions) error) *cobra.Command {
 		`),
 		RunE: func(*cobra.Command, []string) error {
 			if opts.EventTypes == nil {
-				return cmdutil.FlagErrorf("`--events` flag required")
+				return errors.New("`--events` flag required")
 			}
 			if opts.Repo == "" && opts.Org == "" {
-				return cmdutil.FlagErrorf("`--repo` or `--org` flag required")
+				return errors.New("`--repo` or `--org` flag required")
 			}
 			if opts.GitHubHost == "" {
 				opts.GitHubHost = gitHubAPIProdURL
