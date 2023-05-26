@@ -8,41 +8,40 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/exec"
 	"strings"
 	"time"
 
 	"github.com/MakeNowJust/heredoc"
-	"github.com/cli/go-gh/pkg/auth"
 	"github.com/gorilla/websocket"
 	"github.com/spf13/cobra"
 )
 
 const (
-	gitHubAPIProdURL        = "api.github.com"
 	webhookForwarderProdURL = "wss://webhook-forwarder.github.com"
 )
 
 type hookOptions struct {
 	Out              io.Writer
-	GitHubHost       string
+	ErrOut           io.Writer
 	WebhookForwarder string
 	EventTypes       []string
 	Repo             string
 	Org              string
-	URL              string
 	Secret           string
 }
 
 // NewCmdForward returns a forward command.
 func NewCmdForward(runF func(*hookOptions) error) *cobra.Command {
+	var githubHostname string
+	var localURL string
 	opts := &hookOptions{
-		Out: os.Stdout,
+		Out:    os.Stdout,
+		ErrOut: os.Stderr,
 	}
 	cmd := &cobra.Command{
-		Use:   "forward --events=<event_types> --repo|org=<repo|org> [--url=\"<url>\"] [--github-host=<github-host>]",
-		Short: "Receive test events on a server running locally",
-		Long: heredoc.Doc(`To output event payloads to stdout instead of sending to a server,
-			omit the --url flag.`),
+		Use:   "forward --events=<types> [--url=<url>]",
+		Short: "Receive test events locally",
 		Example: heredoc.Doc(`
 			# create a dev webhook for the 'issue_open' event in the monalisa/smile repo in GitHub running locally, and
 			# forward payloads for the triggered event to http://localhost:9999/webhooks
@@ -51,30 +50,25 @@ func NewCmdForward(runF func(*hookOptions) error) *cobra.Command {
 			$ gh webhook forward --events=issues --org=github --url="http://localhost:9999/webhooks"
 		`),
 		RunE: func(*cobra.Command, []string) error {
-			if opts.EventTypes == nil {
-				return errors.New("`--events` flag required")
-			}
 			if opts.Repo == "" && opts.Org == "" {
 				return errors.New("`--repo` or `--org` flag required")
 			}
-			if opts.GitHubHost == "" {
-				opts.GitHubHost = gitHubAPIProdURL
-			}
 
-			if opts.URL == "" {
-				fmt.Fprintf(opts.Out, "No --url specified, printing webhook payloads to stdout.\n")
+			if localURL == "" {
+				fmt.Fprintln(opts.ErrOut, "note: no `--url` specified; printing webhook payloads to stdout")
 			}
 
 			if runF != nil {
 				return runF(opts)
 			}
 
-			token, _ := auth.TokenForHost(opts.GitHubHost)
-			if token == "" {
-				return fmt.Errorf("you must be authenticated to run this command")
+			token, err := authTokenForHost(githubHostname)
+			if err != nil {
+				return fmt.Errorf("fatal: error fetching gh token: %w", err)
+			} else if token == "" {
+				return errors.New("fatal: you must be authenticated with gh to run this command")
 			}
 
-			var err error
 			if opts.WebhookForwarder == "" {
 				opts.WebhookForwarder = webhookForwarderProdURL
 			}
@@ -86,7 +80,7 @@ func NewCmdForward(runF func(*hookOptions) error) *cobra.Command {
 				Secret: opts.Secret,
 			}
 			for i := 0; i < 3; i++ {
-				if err = runFwd(opts.Out, opts.URL, token, wsURL, chp); err != nil {
+				if err = runFwd(opts.Out, localURL, token, wsURL, chp); err != nil {
 					if websocket.IsCloseError(err, websocket.CloseNormalClosure) {
 						return nil
 					}
@@ -95,12 +89,13 @@ func NewCmdForward(runF func(*hookOptions) error) *cobra.Command {
 			return err
 		},
 	}
-	cmd.Flags().StringSliceVarP(&opts.EventTypes, "events", "E", []string{}, "(required) Names of the event types to forward. Event types can be separated by commas (e.g. `issues,pull_request`) or passed as multiple arguments (e.g. `--events issues --events pull_request`). Use `*` to forward all events.")
+	cmd.Flags().StringSliceVarP(&opts.EventTypes, "events", "E", nil, "Names of the event `types` to forward. Use `*` to forward all events.")
+	cmd.MarkFlagRequired("events")
 	cmd.Flags().StringVarP(&opts.Repo, "repo", "R", "", "Name of the repo where the webhook is installed")
-	cmd.Flags().StringVarP(&opts.GitHubHost, "github-host", "H", "", "(optional) Host for the GitHub API, default: api.github.com")
-	cmd.Flags().StringVarP(&opts.URL, "url", "U", "", "(optional) Local address where the server which will receive webhooks is running")
+	cmd.Flags().StringVarP(&githubHostname, "github-host", "H", "github.com", "GitHub host name")
+	cmd.Flags().StringVarP(&localURL, "url", "U", "", "Address of the local server to receive events. If omitted, events will be printed to stdout.")
 	cmd.Flags().StringVarP(&opts.Org, "org", "O", "", "Name of the org where the webhook is installed")
-	cmd.Flags().StringVarP(&opts.Secret, "secret", "S", "", "(optional) webhook secret for incoming events")
+	cmd.Flags().StringVarP(&opts.Secret, "secret", "S", "", "Webhook secret for incoming events")
 	return cmd
 }
 
@@ -236,4 +231,21 @@ func forwardEvent(url string, ev wsEventReceived) (*httpEventForward, error) {
 		Header: resp.Header,
 		Body:   body,
 	}, nil
+}
+
+func authTokenForHost(host string) (string, error) {
+	ghExe := os.Getenv("GH_PATH")
+	if ghExe == "" {
+		var err error
+		ghExe, err = exec.LookPath("gh")
+		if err != nil {
+			return "", err
+		}
+	}
+	cmd := exec.Command(ghExe, "auth", "token", "--secure-storage", "--hostname", host)
+	result, err := cmd.Output()
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(result)), nil
 }
