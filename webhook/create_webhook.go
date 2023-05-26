@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"strconv"
 	"strings"
 
 	"github.com/cli/go-gh/v2/pkg/api"
@@ -37,28 +36,37 @@ type createHookResponse struct {
 	WsURL  string     `json:"ws_url"`
 }
 
+type hookOptions struct {
+	gitHubHost string
+	authToken  string
+	eventTypes []string
+	repo       string
+	org        string
+	secret     string
+}
+
 // createHook issues a request against the GitHub API to create a dev webhook
 func createHook(o *hookOptions) (string, func() error, error) {
 	apiClient, err := api.NewRESTClient(api.ClientOptions{
-		Host:      o.GitHubHost,
+		Host:      o.gitHubHost,
 		AuthToken: o.authToken,
 	})
 	if err != nil {
-		return "", nil, fmt.Errorf("error creating rest client: %w", err)
+		return "", nil, fmt.Errorf("error creating REST client: %w", err)
 	}
-	path := fmt.Sprintf("repos/%s/hooks", o.Repo)
-	if o.Org != "" {
-		path = fmt.Sprintf("orgs/%s/hooks", o.Org)
+	path := fmt.Sprintf("repos/%s/hooks", o.repo)
+	if o.org != "" {
+		path = fmt.Sprintf("orgs/%s/hooks", o.org)
 	}
 
 	req := createHookRequest{
 		Name:   "cli",
-		Events: o.EventTypes,
+		Events: o.eventTypes,
 		Active: false,
 		Config: hookConfig{
 			ContentType: "json",
 			InsecureSSL: "0",
-			Secret:      o.Secret,
+			Secret:      o.secret,
 		},
 	}
 
@@ -76,11 +84,8 @@ func createHook(o *hookOptions) (string, func() error, error) {
 		return "", nil, fmt.Errorf("error creating webhook: %w", err)
 	}
 
-	// reset path for activation.
-	path += "/" + strconv.Itoa(res.ID)
-
 	return res.WsURL, func() error {
-		err = apiClient.Patch(path, strings.NewReader(`{"active": true}`), nil)
+		err := apiClient.Patch(res.URL, strings.NewReader(`{"active": true}`), nil)
 		if err != nil {
 			return fmt.Errorf("error activating webhook: %w", err)
 		}

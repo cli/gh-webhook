@@ -7,7 +7,7 @@ import (
 )
 
 func main() {
-	if err := webhook.NewCmdForward(nil).Execute(); err != nil {
+	if err := webhook.NewCmdForward().Execute(); err != nil {
 		os.Exit(1)
 	}
 }

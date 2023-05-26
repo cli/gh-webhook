@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"os"
 	"strings"
@@ -16,24 +15,17 @@ import (
 	"github.com/spf13/cobra"
 )
 
-type hookOptions struct {
-	Out        io.Writer
-	ErrOut     io.Writer
-	GitHubHost string
-	authToken  string
-	EventTypes []string
-	Repo       string
-	Org        string
-	Secret     string
-}
-
 // NewCmdForward returns a forward command.
-func NewCmdForward(runF func(*hookOptions) error) *cobra.Command {
-	var localURL string
-	opts := &hookOptions{
-		Out:    os.Stdout,
-		ErrOut: os.Stderr,
-	}
+func NewCmdForward() *cobra.Command {
+	var (
+		localURL      string
+		eventTypes    []string
+		targetRepo    string
+		targetOrg     string
+		githubHost    string
+		webhookSecret string
+	)
+
 	cmd := &cobra.Command{
 		Use:   "forward --events=<types> [--url=<url>]",
 		Short: "Receive test events locally",
@@ -45,47 +37,39 @@ func NewCmdForward(runF func(*hookOptions) error) *cobra.Command {
 			$ gh webhook forward --events=issues --org=github --url="http://localhost:9999/webhooks"
 		`),
 		RunE: func(*cobra.Command, []string) error {
-			if opts.Repo == "" && opts.Org == "" {
+			if targetRepo == "" && targetOrg == "" {
 				return errors.New("`--repo` or `--org` flag required")
 			}
 
-			if localURL == "" {
-				fmt.Fprintln(opts.ErrOut, "note: no `--url` specified; printing webhook payloads to stdout")
-			}
-
-			if runF != nil {
-				return runF(opts)
-			}
-
-			var err error
-			opts.authToken, err = authTokenForHost(opts.GitHubHost)
+			authToken, err := authTokenForHost(githubHost)
 			if err != nil {
 				return fmt.Errorf("fatal: error fetching gh token: %w", err)
-			} else if opts.authToken == "" {
-				return errors.New("fatal: you must be authenticated with gh to run this command")
 			}
 
-			wsURL, activate, err := createHook(opts)
+			wsURL, activate, err := createHook(&hookOptions{
+				gitHubHost: githubHost,
+				eventTypes: eventTypes,
+				authToken:  authToken,
+				repo:       targetRepo,
+				org:        targetOrg,
+				secret:     webhookSecret,
+			})
 			if err != nil {
 				return err
 			}
-			for i := 0; i < 3; i++ {
-				if err = runFwd(opts.Out, localURL, opts.authToken, wsURL, activate); err != nil {
-					if websocket.IsCloseError(err, websocket.CloseNormalClosure) {
-						return nil
-					}
-				}
-			}
-			return err
+
+			return runFwd(os.Stdout, localURL, authToken, wsURL, activate)
 		},
 	}
-	cmd.Flags().StringSliceVarP(&opts.EventTypes, "events", "E", nil, "Names of the event `types` to forward. Use `*` to forward all events.")
-	cmd.MarkFlagRequired("events")
-	cmd.Flags().StringVarP(&opts.Repo, "repo", "R", "", "Name of the repo where the webhook is installed")
-	cmd.Flags().StringVarP(&opts.GitHubHost, "github-host", "H", "github.com", "GitHub host name")
+
+	cmd.Flags().StringSliceVarP(&eventTypes, "events", "E", nil, "Names of the event `types` to forward. Use `*` to forward all events.")
+	_ = cmd.MarkFlagRequired("events")
+	cmd.Flags().StringVarP(&targetRepo, "repo", "R", "", "Name of the repo where the webhook is installed")
+	cmd.Flags().StringVarP(&githubHost, "github-host", "H", "github.com", "GitHub host name")
 	cmd.Flags().StringVarP(&localURL, "url", "U", "", "Address of the local server to receive events. If omitted, events will be printed to stdout.")
-	cmd.Flags().StringVarP(&opts.Org, "org", "O", "", "Name of the org where the webhook is installed")
-	cmd.Flags().StringVarP(&opts.Secret, "secret", "S", "", "Webhook secret for incoming events")
+	cmd.Flags().StringVarP(&targetOrg, "org", "O", "", "Name of the org where the webhook is installed")
+	cmd.Flags().StringVarP(&webhookSecret, "secret", "S", "", "Webhook secret for incoming events")
+
 	return cmd
 }
 
@@ -95,6 +79,9 @@ type wsEventReceived struct {
 }
 
 func runFwd(out io.Writer, url, token, wsURL string, activateHook func() error) error {
+	if url == "" {
+		fmt.Fprintln(os.Stderr, "notice: no `--url` specified; printing webhook payloads to stdout")
+	}
 	for i := 0; i < 3; i++ {
 		err := handleWebsocket(out, url, token, wsURL, activateHook)
 		if err != nil {
@@ -102,6 +89,8 @@ func runFwd(out io.Writer, url, token, wsURL string, activateHook func() error) 
 			if websocket.IsCloseError(err, websocket.CloseAbnormalClosure) {
 				time.Sleep(5 * time.Second)
 				continue
+			} else if websocket.IsCloseError(err, websocket.CloseNormalClosure) {
+				return nil
 			}
 			return err
 		}
@@ -117,7 +106,7 @@ func handleWebsocket(out io.Writer, url, token, wsURL string, activateHook func(
 	}
 	defer c.Close()
 
-	fmt.Fprintf(out, "Forwarding Webhook events from GitHub...\n")
+	fmt.Fprintln(os.Stderr, "Forwarding Webhook events from GitHub...")
 	if err := activateHook(); err != nil {
 		return fmt.Errorf("error activating hook: %w", err)
 	}
@@ -129,9 +118,9 @@ func handleWebsocket(out io.Writer, url, token, wsURL string, activateHook func(
 			return fmt.Errorf("error receiving json event: %w", err)
 		}
 
-		resp, err := forwardEvent(url, ev)
+		resp, err := forwardEvent(out, url, ev)
 		if err != nil {
-			fmt.Fprintf(out, "Error forwarding event: %v\n", err)
+			fmt.Fprintf(os.Stderr, "warning: error forwarding event: %v\n", err)
 			continue
 		}
 
@@ -164,13 +153,18 @@ type httpEventForward struct {
 }
 
 // forwardEvent forwards events to the server running on the local port specified by the user
-func forwardEvent(url string, ev wsEventReceived) (*httpEventForward, error) {
-	event := ev.Header.Get("X-GitHub-Event")
-	event = strings.ReplaceAll(event, "\n", "")
-	event = strings.ReplaceAll(event, "\r", "")
-	log.Printf("[LOG] received the following event: %v \n", event)
+func forwardEvent(w io.Writer, url string, ev wsEventReceived) (*httpEventForward, error) {
 	if url == "" {
-		fmt.Printf("%s\n", ev.Body)
+		event := ev.Header.Get("X-GitHub-Event")
+		event = strings.ReplaceAll(event, "\n", "")
+		event = strings.ReplaceAll(event, "\r", "")
+		fmt.Fprintf(os.Stderr, "[LOG] received event %q\n", event)
+		if _, err := w.Write(ev.Body); err != nil {
+			return nil, err
+		}
+		if _, err := w.Write([]byte("\n")); err != nil {
+			return nil, err
+		}
 		return &httpEventForward{Status: 200, Header: make(http.Header), Body: []byte("OK")}, nil
 	}
 
