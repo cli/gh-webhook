@@ -36,9 +36,13 @@ func NewCmdForward() *cobra.Command {
 			$ gh webhook forward --events=issues --repo=monalisa/smile --url="http://localhost:9999/webhooks"
 			$ gh webhook forward --events=issues --org=github --url="http://localhost:9999/webhooks"
 		`),
-		RunE: func(*cobra.Command, []string) error {
+		RunE: func(c *cobra.Command, _ []string) error {
 			if targetRepo == "" && targetOrg == "" {
 				return errors.New("`--repo` or `--org` flag required")
+			}
+
+			if envHost := os.Getenv("GH_HOST"); envHost != "" && !c.Flags().Changed("github-host") {
+				githubHost = envHost
 			}
 
 			authToken, err := authTokenForHost(githubHost)
