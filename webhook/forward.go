@@ -102,7 +102,8 @@ func runFwd(out io.Writer, url, token, wsURL string, activateHook func() error) 
 func handleWebsocket(out io.Writer, url, token, wsURL string, activateHook func() error) error {
 	c, err := dial(token, wsURL)
 	if err != nil {
-		return fmt.Errorf("error dialing to ws server: %w", err)
+		fmt.Errorf("wsURL: %w", wsURL)
+		return fmt.Errorf("error dialing to ws server2: %w", err)
 	}
 	defer c.Close()
 
