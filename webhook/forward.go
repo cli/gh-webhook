@@ -156,6 +156,16 @@ type httpEventForward struct {
 	Body   []byte
 }
 
+var forwardClient = &http.Client{
+	CheckRedirect: func(req *http.Request, via []*http.Request) error {
+		if len(via) > 0 && req.URL.Scheme != via[0].URL.Scheme {
+			return fmt.Errorf("refusing to follow redirect that changes scheme from %q to %q (target: %s); check your local server's redirect/HTTPS settings",
+				via[0].URL.Scheme, req.URL.Scheme, req.URL.String())
+		}
+		return nil
+	},
+}
+
 // forwardEvent forwards events to the server running on the local port specified by the user
 func forwardEvent(w io.Writer, url string, ev wsEventReceived) (*httpEventForward, error) {
 	if url == "" {
@@ -181,7 +191,7 @@ func forwardEvent(w io.Writer, url string, ev wsEventReceived) (*httpEventForwar
 		req.Header.Set(k, ev.Header.Get(k))
 	}
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := forwardClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
