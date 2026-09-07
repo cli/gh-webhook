@@ -27,8 +27,9 @@ func NewCmdForward() *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:   "forward --events=<types> [--url=<url>]",
-		Short: "Receive test events locally",
+		Use:          "forward --events=<types> [--url=<url>]",
+		Short:        "Receive test events locally",
+		SilenceUsage: true,
 		Example: heredoc.Doc(`
 			# create a dev webhook for the 'issue_open' event in the monalisa/smile repo in GitHub running locally, and
 			# forward payloads for the triggered event to http://localhost:9999/webhooks
@@ -90,16 +91,21 @@ func runFwd(out io.Writer, url, token, wsURL string, activateHook func() error) 
 		err := handleWebsocket(out, url, token, wsURL, activateHook)
 		if err != nil {
 			// If the error is a server disconnect (1006), retry connecting
-			if websocket.IsCloseError(err, websocket.CloseAbnormalClosure) {
+			if isWebsocketCloseError(err, websocket.CloseAbnormalClosure) {
 				time.Sleep(5 * time.Second)
 				continue
-			} else if websocket.IsCloseError(err, websocket.CloseNormalClosure) {
+			} else if isWebsocketCloseError(err, websocket.CloseNormalClosure) {
 				return nil
 			}
 			return err
 		}
 	}
 	return fmt.Errorf("unable to connect to webhooks server, forwarding stopped")
+}
+
+func isWebsocketCloseError(err error, code int) bool {
+	var closeError *websocket.CloseError
+	return errors.As(err, &closeError) && closeError.Code == code
 }
 
 // handleWebsocket mediates between websocket server and local web server
